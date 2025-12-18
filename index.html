@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CoC d100 판정</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 16px; background: #0b0f14; color: #e8eef6; }
+    .card { background: #111826; border: 1px solid #1f2a3a; border-radius: 16px; padding: 14px; margin-bottom: 12px; }
+    h1 { font-size: 18px; margin: 0 0 10px; }
+    input, button { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #243247; background: #0f1622; color: #e8eef6; }
+    button { background: #1b2a44; cursor: pointer; font-weight: 700; }
+    button:active { transform: translateY(1px); }
+    .mini { font-size: 12px; opacity: .85; line-height: 1.45; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #0f1622; border: 1px solid #243247; border-radius: 12px; padding: 12px; margin: 0; }
+    .chips { display:flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .chip { width: auto; padding: 10px 12px; border-radius: 999px; border: 1px solid #243247; background:#0f1622; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🎲 CoC d100 판정</h1>
+    <div class="mini">
+      입력 예: <b>체력 65</b> / <b>회피 40</b> / <b>정신력 55</b> / <b>65</b><br/>
+      (이름은 그냥 라벨로 출력됩니다)
+    </div>
+  </div>
+
+  <div class="card">
+    <input id="cmd" placeholder="예: 체력 65" />
+    <button id="go" style="margin-top:10px;">굴리기</button>
+
+    <div class="chips">
+      <button class="chip" data-cmd="체력 65">체력 65</button>
+      <button class="chip" data-cmd="회피 40">회피 40</button>
+      <button class="chip" data-cmd="정신력 55">정신력 55</button>
+      <button class="chip" data-cmd="관찰력 70">관찰력 70</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <pre id="out">여기 결과가 표시됩니다.</pre>
+    <button id="copy" style="margin-top:10px;">결과 복사</button>
+  </div>
+
+<script>
+  const $ = (s)=>document.querySelector(s);
+  const out = $("#out");
+  const cmd = $("#cmd");
+
+  function randInt(min, max) { // inclusive
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  // CoC 7e: d100 result with success tiers
+  function rollCoC(label, target) {
+    // d100: 1..100
+    const roll = randInt(1,100);
+
+    const t = target;
+    const hard = Math.floor(t/2);
+    const extreme = Math.floor(t/5);
+
+    let tier = "실패";
+    if (roll <= t) tier = "성공";
+    if (roll <= hard) tier = "어려운 성공";
+    if (roll <= extreme) tier = "극한 성공";
+
+    // Optional special (common)
+    let special = "";
+    if (roll === 1) special = "대성공(1)";
+    else if (roll === 100) special = "치명적 실패(100)";
+    else if (roll >= 96 && t < 50) special = "치명적 실패(96-100, 목표치<50)";
+
+    const sp = special ? `\n※ ${special}` : "";
+    const name = label ? `${label} ` : "";
+
+    return [
+      `🎲 CoC d100 판정`,
+      `${name}목표치: ${t} (어려운≤${hard}, 극한≤${extreme})`,
+      `굴림: ${roll}`,
+      `판정: ${tier}${sp}`
+    ].join("\n");
+  }
+
+  // Parse input like "체력 65" / "체력:65" / "65"
+  function parseInput(raw) {
+    const s = raw.trim();
+    if (!s) throw new Error("입력을 해주시오. 예: 체력 65");
+
+    // Try to find a number (1..99) anywhere
+    const numMatch = s.match(/(\d{1,3})/);
+    if (!numMatch) throw new Error("숫자 목표치를 찾지 못했습니다. 예: 체력 65");
+
+    let target = parseInt(numMatch[1], 10);
+    if (target < 1) target = 1;
+    if (target > 99) target = 99; // CoC 목표치는 보통 1~99로 제한
+
+    // Label = text part with the number removed (optional)
+    const label = s.replace(numMatch[1], "").replace(/[:\-\s]+/g, " ").trim();
+
+    return { label, target };
+  }
+
+  function run(raw) {
+    const { label, target } = parseInput(raw);
+    return rollCoC(label, target);
+  }
+
+  function setOutput(text){ out.textContent = text; }
+
+  $("#go").addEventListener("click", ()=>{
+    try { setOutput(run(cmd.value)); }
+    catch(e){ setOutput("⚠️ " + e.message); }
+  });
+
+  $("#copy").addEventListener("click", async ()=>{
+    try {
+      await navigator.clipboard.writeText(out.textContent);
+      setOutput(out.textContent + "\n\n✅ 복사됨");
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = out.textContent;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      setOutput(out.textContent + "\n\n✅ 복사됨(대체)");
+    }
+  });
+
+  document.querySelectorAll("[data-cmd]").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      cmd.value = b.getAttribute("data-cmd");
+      $("#go").click();
+    });
+  });
+
+  // URL param auto-run: ?cmd=체력%2065
+  const params = new URLSearchParams(location.search);
+  const q = params.get("cmd");
+  if (q) { cmd.value = q; $("#go").click(); }
+</script>
+</body>
+</html>
