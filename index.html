@@ -15,6 +15,65 @@
     pre { white-space: pre-wrap; word-break: break-word; background: #0f1622; border: 1px solid #243247; border-radius: 12px; padding: 12px; margin: 0; }
     .chips { display:flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .chip { width: auto; padding: 10px 12px; border-radius: 999px; border: 1px solid #243247; background:#0f1622; }
+/* 결과 카드 레이아웃 */
+  .result-card {
+    background:#0f1622;
+    border:1px solid #243247;
+    border-radius:16px;
+    padding:14px;
+  }
+
+  .rc-name {
+    font-size:18px;
+    font-weight:900;
+    margin-bottom:4px;
+  }
+
+  .rc-scale {
+    font-size:13px;
+    opacity:.85;
+    margin-bottom:12px;
+  }
+
+  .rc-main {
+    background:#0b0f14;
+    border:1px solid #1f2a3a;
+    border-radius:14px;
+    padding:12px;
+  }
+
+  .rc-roll {
+    font-size:20px;
+    font-weight:800;
+    margin-bottom:6px;
+  }
+
+  .rc-judge {
+    font-size:16px;
+    font-weight:800;
+  }
+
+  .rc-special {
+    margin-top:10px;
+    padding:10px 12px;
+    border-radius:12px;
+    border:1px solid #243247;
+    background:#111826;
+    font-size:13px;
+  }
+
+  .rc-actions {
+    margin-top:10px;
+    display:flex;
+    justify-content:flex-end;
+  }
+
+  /* 판정 단계 색상 */
+  .j-fail     { color: #ef4444; }
+  .j-normal   { color: #166534; }
+  .j-hard     { color: #22c55e; }
+  .j-extreme  { color: #a3e635; }
+  .j-critical { color: #facc15; }
   </style>
 </head>
 <body>
@@ -39,8 +98,25 @@
   </div>
 
   <div class="card">
-    <pre id="out">여기 결과가 표시됩니다.</pre>
-    <button id="copy" style="margin-top:10px;">결과 복사</button>
+<div id="card" class="result-card">
+  <div id="rc-name" class="rc-name">판정항목</div>
+  <div id="rc-scale" class="rc-scale">성공 - / 어려운 - / 극한 -</div>
+
+  <div class="rc-main">
+    <div id="rc-roll" class="rc-roll">굴림 : -</div>
+    <div id="rc-judge" class="rc-judge">판정 : -</div>
+  </div>
+
+  <div id="rc-special" class="rc-special" style="display:none;"></div>
+
+  <div class="rc-actions">
+    <button id="copyText" class="chip">텍스트 복사</button>
+  </div>
+</div>
+
+<!-- 카톡 복사용 텍스트는 숨김으로 유지 -->
+<pre id="out" style="display:none;"></pre>
+
   </div>
 
 <script>
@@ -53,35 +129,32 @@
   }
 
   // CoC 7e: d100 result with success tiers
-  function rollCoC(label, target) {
-    // d100: 1..100
-    const roll = randInt(1,100);
+  function rollCoCData(label, target) {
+  const roll = randInt(1,100);
+  const t = target;
+  const hard = Math.floor(t/2);
+  const extreme = Math.floor(t/5);
 
-    const t = target;
-    const hard = Math.floor(t/2);
-    const extreme = Math.floor(t/5);
-
-    let tier = "실패";
-    if (roll <= t) tier = "성공";
-    if (roll <= hard) tier = "어려운 성공";
-    if (roll <= extreme) tier = "극한 성공";
-
-    // Optional special (common)
-    let special = "";
-    if (roll === 1) special = "대성공(1)";
-    else if (roll === 100) special = "치명적 실패(100)";
-    else if (roll >= 96 && t < 50) special = "치명적 실패(96-100, 목표치<50)";
-
-    const sp = special ? `\n※ ${special}` : "";
-    const name = label ? `${label} ` : "";
-
-    return [
-      `🎲 CoC d100 판정`,
-      `${name}목표치: ${t} (어려운≤${hard}, 극한≤${extreme})`,
-      `굴림: ${roll}`,
-      `판정: ${tier}${sp}`
-    ].join("\n");
+  // 5단계 판정: 실패 / 보통성공 / 어려운성공 / 극한적성공 / 대성공(1)
+  let tier = "실패";
+  if (roll === 1) {
+    tier = "대성공 (1)";
+  } else if (roll <= extreme) {
+    tier = "극한적 성공";
+  } else if (roll <= hard) {
+    tier = "어려운 성공";
+  } else if (roll <= t) {
+    tier = "보통 성공";
   }
+
+  // (선택) 치명적 실패 표기: 표 룰이 다를 수 있어 '표시만' 합니다
+  let special = "";
+  if (roll === 100) special = "치명적 실패(100)";
+  else if (roll >= 96 && t < 50) special = "치명적 실패(96-100, 목표치<50)";
+
+  return { label, target:t, hard, extreme, roll, tier, specialText: special };
+}
+
 
   // Parse input like "체력 65" / "체력:65" / "65"
   function parseInput(raw) {
@@ -102,32 +175,75 @@
     return { label, target };
   }
 
-  function run(raw) {
-    const { label, target } = parseInput(raw);
-    return rollCoC(label, target);
+function updateCard(data) {
+  $("#rc-name").textContent = data.label || "판정";
+  $("#rc-scale").textContent =
+    `성공 ${data.target} / 어려운 ${data.hard} / 극한 ${data.extreme}`;
+
+  $("#rc-roll").textContent =
+    `굴림 : ${String(data.roll).padStart(2, "0")}`;
+
+  const judge = $("#rc-judge");
+  judge.textContent = `판정 : ${data.tier}`;
+
+  // 색상 초기화 + 단계별 색상 적용
+  judge.className = "rc-judge";
+  if (data.tier.includes("대성공")) {
+    judge.classList.add("j-critical");
+  } else if (data.tier === "극한적 성공") {
+    judge.classList.add("j-extreme");
+  } else if (data.tier === "어려운 성공") {
+    judge.classList.add("j-hard");
+  } else if (data.tier === "보통 성공") {
+    judge.classList.add("j-normal");
+  } else {
+    judge.classList.add("j-fail");
   }
+
+  const sp = $("#rc-special");
+  if (data.specialText) {
+    sp.style.display = "block";
+    sp.textContent = `※ ${data.specialText}`;
+  } else {
+    sp.style.display = "none";
+    sp.textContent = "";
+  }
+}
+
+  
+  
+  function run(raw) {
+  const { label, target } = parseInput(raw);
+  const data = rollCoCData(label, target);
+
+  // 카드 업데이트
+  updateCard(data);
+
+  // 카톡용 복사 텍스트(out에 저장)
+  const sp = data.specialText ? `\n※ ${data.specialText}` : "";
+  return [
+    `${data.label || "판정"}`,
+    `성공 ${data.target} / 어려운 ${data.hard} / 극한 ${data.extreme}`,
+    ``,
+    `굴림 : ${String(data.roll).padStart(2, "0")}`,
+    `판정 : ${data.tier}${sp}`
+  ].join("\n");
+}
 
   function setOutput(text){ out.textContent = text; }
 
-  $("#go").addEventListener("click", ()=>{
-    try { setOutput(run(cmd.value)); }
-    catch(e){ setOutput("⚠️ " + e.message); }
-  });
-
-  $("#copy").addEventListener("click", async ()=>{
-    try {
-      await navigator.clipboard.writeText(out.textContent);
-      setOutput(out.textContent + "\n\n✅ 복사됨");
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = out.textContent;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-      setOutput(out.textContent + "\n\n✅ 복사됨(대체)");
-    }
-  });
+$("#go").addEventListener("click", ()=>{
+  try { out.textContent = run(cmd.value); }
+  catch(e){ out.textContent = "⚠️ " + e.message; }
+});
+  
+$("#copyText").addEventListener("click", async ()=>{
+  try {
+    await navigator.clipboard.writeText(out.textContent);
+  } catch {
+    alert("복사에 실패했습니다. 브라우저 권한을 확인해주세요.");
+  }
+});
 
   document.querySelectorAll("[data-cmd]").forEach(b=>{
     b.addEventListener("click", ()=>{
